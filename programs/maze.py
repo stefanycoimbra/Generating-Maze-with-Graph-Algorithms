@@ -8,7 +8,7 @@
 
 import sys
 import ctypes
-import random
+import time
 import numpy as np
 import OpenGL.GL as gl
 import OpenGL.GLUT as glut
@@ -39,12 +39,20 @@ uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
+uniform float offsety;
+uniform float offsetz;
+
 out vec3 vNormal;
 out vec3 fragPosition;
 
 void main()
 {
-    gl_Position = projection * view * model * vec4(position, 1.0);
+    vec3 offsets;
+    offsets.x = 0.0f;
+    offsets.y = offsety * 1.0f;
+    offsets.z = offsetz * 1.0f;
+            
+    gl_Position = projection * view * model * vec4(position + offsets, 1.0);
     vNormal = mat3(transpose(inverse(model)))*normal;
     fragPosition = vec3(model * vec4(position, 1.0));
 }
@@ -87,6 +95,42 @@ void main()
 }
 """
 
+# Open path to construct maze.
+def maze_binary_tree(grid:np.ndarray, size:int) -> np.ndarray:
+    output_grid = np.empty([size*3, size*3],dtype=str)
+    output_grid[:] = '#'
+    
+    i = 0
+    j = 0
+    while i < size:
+        w = i*3 + 1
+        while j < size:
+            k = j*3 + 1
+            toss = grid[i,j]
+            output_grid[w,k] = ' '
+            if toss == 0 and k+2 < size*3:
+                output_grid[w,k+1] = ' '
+                output_grid[w,k+2] = ' '
+            if toss == 1 and w-2 >=0:
+                output_grid[w-1,k] = ' '
+                output_grid[w-2,k] = ' '
+            
+            j = j + 1
+            
+        i = i + 1
+        j = 0
+        
+    return output_grid
+
+# Avoid digging outside the maze external borders
+def preprocess_grid(grid:np.ndarray, size:int) -> np.ndarray:
+    first_row = grid[0]
+    first_row[first_row == 1] = 0
+    grid[0] = first_row
+    for i in range(1,size):
+        grid[i,size-1] = 1
+    return grid
+
 ## Drawing function.
 #
 # Draws primitive.
@@ -97,21 +141,20 @@ def display():
 
     gl.glUseProgram(program)
     gl.glBindVertexArray(VAO)
-    
+
     S = ut.matScale(0.1, 0.1, 0.1)
     Rx = ut.matRotateX(np.radians(0.0))
-    Ry = ut.matRotateY(np.radians(-90.0))
+    Ry = ut.matRotateY(np.radians(-80.0))
     model = np.matmul(Rx,S)
     model = np.matmul(Ry,model)
     loc = gl.glGetUniformLocation(program, "model");
     gl.glUniformMatrix4fv(loc, 1, gl.GL_FALSE, model.transpose())
     
-    projection = ut.matPerspective(np.radians(45.0), win_width/win_height, 0.1, 100.0)
+    
+    projection = ut.matPerspective(np.radians(60.0), win_width/win_height, 0.1, 100.0)
     loc = gl.glGetUniformLocation(program, "projection");
     gl.glUniformMatrix4fv(loc, 1, gl.GL_FALSE, projection.transpose())
-
-    # Object color.
-  
+   
     # Light color.
     loc = gl.glGetUniformLocation(program, "lightColor")
     gl.glUniform3f(loc, 1.0, 1.0, 1.0)
@@ -120,23 +163,44 @@ def display():
     gl.glUniform3f(loc, 1.0, 0.0, 2.0)
     # Camera position.
     loc = gl.glGetUniformLocation(program, "cameraPosition")
-    gl.glUniform3f(loc, 0.0, 5.0, -5.0)
+    gl.glUniform3f(loc, 0.0, 0.0, 0.0)
+
+    view = ut.matTranslate(1.0, -0.3, -5.0)
+    loc = gl.glGetUniformLocation(program, "view")
+    gl.glUniformMatrix4fv(loc, 1, gl.GL_FALSE, view.transpose())
     
-    loc = gl.glGetUniformLocation(program, "objectColor")
-    gl.glUniform3f(loc, 0.5, 0.1, 0.1)
+    # Call functions to build and processed grid of maze.
+    n=1
+    p=0.5
+    size=8
+    grid = np.random.binomial(n,p, size=(size,size))
+    processed_grid = preprocess_grid(grid, size)
+    output = maze_binary_tree(processed_grid, size)
+    offsety = -20
+    offsetz = -20
     
-    
-    # Building cubes grid
-    for y in range(-20, 20, 1):
-        for x in range(-20, 20, 1):       
-            translationx = (x) / 10.0
-            translationy = (y) / 10.0
+    # Each cube will receive the color relationed with being or not part of
+    # the free way of the maze.
+    for elm in output:
+        for elm2 in elm:
+            if(elm2 == '#'):
+                loc = gl.glGetUniformLocation(program, "objectColor")
+                gl.glUniform3f(loc, 1.0, 1.0, 1.0)
+            else:
+                loc = gl.glGetUniformLocation(program, "objectColor")
+                gl.glUniform3f(loc, 1.5, 1.2, 0.1)
             
-            view = ut.matTranslate(translationx, translationy, -5.0)
-            loc = gl.glGetUniformLocation(program, "view");
-            gl.glUniformMatrix4fv(loc, 1, gl.GL_FALSE, view.transpose())
+            offsety_loc = gl.glGetUniformLocation(program, "offsety")
+            gl.glUniform1f(offsety_loc, offsety)
+            offsetz_loc = gl.glGetUniformLocation(program, "offsetz")
+            gl.glUniform1f(offsetz_loc, offsetz)
             gl.glDrawArrays(gl.GL_TRIANGLES, 0, 12*3)
             
+            if offsetz < 26:
+                offsetz += 2
+            elif offsetz == 26:
+                offsety += 2
+                offsetz = -20
     glut.glutSwapBuffers()
 
 
@@ -165,10 +229,14 @@ def keyboard(key, x, y):
 
     global type_primitive
     global mode
+    global vertex_code
+    global teste
+    global program
 
     if key == b'\x1b'or key == b'q':
         glut.glutLeaveMainLoop()
-
+        
+    program = ut.createShaderProgram(vertex_code, fragment_code)
     glut.glutPostRedisplay()
 
 
@@ -240,7 +308,7 @@ def initData():
     # Unbind Vertex Array Object.
     gl.glBindVertexArray(0)
 
-    gl.glEnable(gl.GL_DEPTH_TEST)
+    gl.glEnable(gl.GL_DEPTH_TEST);
 
 ## Create program (shaders).
 #
@@ -250,7 +318,6 @@ def initShaders():
     global program
 
     program = ut.createShaderProgram(vertex_code, fragment_code)
-
 
 ## Main function.
 #
