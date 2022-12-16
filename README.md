@@ -29,8 +29,8 @@ Na pasta com o arquivo `maze.py`, rodar: `.python maze.py`
 - `s`ou `S`: aproxima a câmera de observação do labirinto.
 - `a` ou `A`: rotaciona labirinto para a esquerda em torno do eixo y.
 - `d` ou `D`: rotaciona labirinto para a direita em torno do eixo y.
-- `1`: geração do labirinto pelo algoritmo de árvore binária.
-- `2`: geração do labirinto pelo algoritmo de Kruskal.
+- `t` ou `T`: geração do labirinto pelo algoritmo de árvore binária.
+- `k` ou `K`: geração do labirinto pelo algoritmo de Kruskal.
 - `q`: sair do programa.
 
 ## Time
