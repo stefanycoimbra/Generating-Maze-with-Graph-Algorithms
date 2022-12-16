@@ -2,6 +2,7 @@
 Gerador de labirintos utilizando os algoritmos de grafos:
 - Binary Tree
 - Kruskal
+
 Depois de gerado o labirinto, sua solução é dada pelo algoritmo:
 - Dijkstra
 
