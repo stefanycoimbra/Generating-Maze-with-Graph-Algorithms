@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 
 ## @file maze.py
-#  Generates a maze using graph algorithm.
+# Generates a maze using graph algorithm.
 # 
-# @author Ricardo Dutra da Silva
-
+# Adapted code of Ricardo Dutra da Silva.
+# @authors: Stéfany Coura Coimbra - 2019008562
+#           Viviane Cardosina Cordeiro - 2019004984
+#           Ytalo Ysmaicon Gomes - 2019000223
 
 import sys
 import ctypes
 from ctypes import c_void_p
-import time
 import numpy as np
 import OpenGL.GL as gl
 import OpenGL.GLUT as glut
@@ -17,7 +18,6 @@ sys.path.append('../lib/')
 import utils as ut
 import random
 import heapq
-
 
 ## Window width.
 win_width  = 1000
@@ -31,8 +31,10 @@ VAO = None
 ## Vertex buffer object.
 VBO = None
 
+## Variable to choose the graph algorithm to generate maze: Kruskal or Binary Tree.
 algorithm = 1
 
+## Camera Position's variables  
 camera_posx = 0.0
 camera_posy = 0.0
 
@@ -102,61 +104,82 @@ void main()
 }
 """
 
-# function to generate the maze
-def maze_kruskal(n, m):
-  def find(p, q):
+## Maze Kruskal function.
+#
+# Generate the maze using kruskal.
+#
+# @param size_row Size of rows.
+# @param size_column Size of columns.
+def maze_kruskal(size_row, size_column):
+
+  ## Union-Find internal function.
+  #
+  # Union and Find recursively p and q sets.
+  #
+  # @param p First set.
+  # @param q Second set. 
+  def union_find(p, q):
+    
     if p != cells[p] or q != cells[q]:
-      cells[p], cells[q] = find(cells[p], cells[q])
-    return cells[p], cells[q]    # find spanning tree
+      cells[p], cells[q] = union_find(cells[p], cells[q])
+    return cells[p], cells[q]    
 
-  # make even size to avoid issues in the future
-  if n % 2 == 1:
-    n = n + 1
-  if m % 2 == 1:
-    m = m + 1
+  # Make even size of matrix to work with that later.
+  if size_row % 2 == 1:
+    size_row = size_row + 1
+  if size_column % 2 == 1:
+    size_column = size_column + 1
 
-  # maze checkerboard of wall squares and squares that can be either walls or pathways
-  maze = np.tile([[1, 2], [2, 0]], (n // 2 + 1, m // 2 + 1))
+  # Create and initialize maze with some walls randomly.
+  maze = np.tile([[1, 2], [2, 0]], (size_row // 2 + 1, size_column // 2 + 1))
   maze = maze[:-1, :-1]
   cells = {(i, j): (i, j) for i, j in np.argwhere(maze == 1)}
-  walls = np.argwhere(maze == 2)    # union-find
+  walls = np.argwhere(maze == 2)    
   np.random.shuffle(walls)
 
-  # kruskal's maze algorithm
-  for wi, wj in walls:
-    if wi % 2:
-      p, q = find((wi - 1, wj), (wi + 1, wj))
+  # Find spanning tree.
+  for wall_i, wall_j in walls:
+    if wall_i % 2:
+      p, q = union_find((wall_i - 1, wall_j), (wall_i + 1, wall_j))
     else:
-      p, q = find((wi, wj - 1), (wi, wj + 1))
-    maze[wi, wj] = p != q
+      p, q = union_find((wall_i, wall_j - 1), (wall_i, wall_j + 1))
+    maze[wall_i, wall_j] = p != q
     if p != q:
       cells[p] = q
 
-  # initialise the vertical borders
-  vertBordersLeft = np.zeros((n + 3,), dtype=int)
-  vertBordersRight = vertBordersLeft.copy()
-  vertBordersLeft[random.randint(1, n // 2) * 2 - 1] = 6 # Create entrance where agent starts
-  vertBordersRight[random.randint(1, n // 2) * 2 - 1] = 5 # Create exit
+  # Initialise the vertical borders.
+  verticalBordersLeft = np.zeros((size_row + 3,), dtype=int)
+  verticalBordersRight = verticalBordersLeft.copy()
+  # Create entrance where agent starts.
+  verticalBordersLeft[random.randint(1, size_row // 2) * 2 - 1] = 6
+  # Create exit. 
+  verticalBordersRight[random.randint(1, size_row // 2) * 2 - 1] = 5 
   
-  # initialise the horizontal borders
-  horiBorders = np.zeros((m + 1,), dtype=int)
+  # Initialise the horizontal borders.
+  horizontalBorders = np.zeros((size_column + 1,), dtype=int)
 
-  # pad maze with walls
-  maze = np.concatenate(([horiBorders], maze), axis=0)
-  maze = np.concatenate((maze, [horiBorders]), axis=0)
-  maze = np.insert(maze, 0, vertBordersLeft, axis=1)
-  maze = np.insert(maze, len(maze[0]), vertBordersRight, axis=1)
+  # Concatenate the borders in the maze.
+  maze = np.concatenate(([horizontalBorders], maze), axis=0)
+  maze = np.concatenate((maze, [horizontalBorders]), axis=0)
+  maze = np.insert(maze, 0, verticalBordersLeft, axis=1)
+  maze = np.insert(maze, len(maze[0]), verticalBordersRight, axis=1)
 
   return maze
 
+## Maze Kruskal Int Pattern.
+#
+# Generate matrix with 1-wall, 0-free path, 2-cell part of the shortest path. 
+#
+# @param maze matrix with the set values to build the scene.
 def maze_int_kruskal(maze):
+
     output_int = [[int(-2) for col in row] for row in maze]
     z = 0
     w = 0
     starti = 0
     endi = 0
-    for z in range(0,24):
-        for w in range(0,24):
+    for z in range(0, 24):
+        for w in range(0, 24):
             if maze[z][w] == 0:
                 output_int[z][w] = 1
             elif maze[z][w] == 1 or maze[z][w] == 4 or maze[z][w] == 5:
@@ -167,16 +190,22 @@ def maze_int_kruskal(maze):
                 endi = z
     
     distance, prev_point = dijkstra(output_int, (starti, 0))
-    dij = find_shortest_path(prev_point, (endi, 25))
+    dij = find_shortest_path(prev_point, (endi, 24))
     
     for elm in dij:
         output_int[elm[0]][elm[1]] = 2
     
     return output_int
 
-# Open path to construct maze.
-def maze_binary_tree(grid:np.ndarray, size:int) -> np.ndarray:
-    output_grid = np.empty([size*3, size*3],dtype=str)
+## Maze Binary Three function.    
+#
+# Open path to construct maze using the algorithm binary tree.
+#
+# @param grid Grid.
+# #param size Length of three.
+def maze_binary_tree(grid, size):
+
+    output_grid = np.empty([size*3, size*3], dtype=str)
     output_grid[:] = '#'
     
     i = 0
@@ -185,39 +214,51 @@ def maze_binary_tree(grid:np.ndarray, size:int) -> np.ndarray:
         w = i*3 + 1
         while j < size:
             k = j*3 + 1
-            toss = grid[i,j]
-            output_grid[w,k] = ' '
-            if toss == 0 and k+2 < size*3:
-                output_grid[w,k+1] = ' '
-                output_grid[w,k+2] = ' '
-            if toss == 1 and w-2 >=0:
-                output_grid[w-1,k] = ' '
-                output_grid[w-2,k] = ' '
-            
+            direction = grid[i, j]
+            output_grid[w, k] = ' '
+            # The grid is generated in every interaction of the user to build a maze.
+            # Direction taken -> north/east.
+            if direction == grid[i, j] == 0 and k+2 < size*3:
+                output_grid[w, k+1] = ' '
+                output_grid[w, k+2] = ' '
+            if direction == 1 and w-2 >= 0:
+                output_grid[w-1, k] = ' '
+                output_grid[w-2, k] = ' '
             j = j + 1
-            
         i = i + 1
         j = 0
         
     return output_grid
 
-# Avoid digging outside the maze external borders
-def preprocess_grid(grid:np.ndarray, size:int) -> np.ndarray:
+## Pre-processing grid function.
+#
+# Avoid digging outside the maze external borders.
+#
+# @param grid Grid.
+# #param size Length of three.
+def preprocess_binomial(grid, size):
+
     first_row = grid[0]
     first_row[first_row == 1] = 0
     grid[0] = first_row
-    for i in range(1,size):
-        grid[i,size-1] = 1
+    for i in range(1, size):
+        grid[i, size-1] = 1
     return grid
 
+## Maze Binary Tree Int Pattern.
+#
+#  Generate matrix with 1-wall, 0-free path, 2-cell part of the shortest path. 
+#
+# @param maze matrix with the set values to build the scene.
 def maze_int_binary_tree(maze):
+
     output_int = [[int(0) for col in row] for row in maze]
     z = 0
     w = 0
     starti = 0
     endi = 0
-    for z in range(0,24):
-        for w in range(0,24):
+    for z in range(0, 24):
+        for w in range(0, 24):
             if maze[z][w] == '#':
                 output_int[z][w] = 1
                 
@@ -229,27 +270,36 @@ def maze_int_binary_tree(maze):
     
     return output_int
 
+## Dijkstra's algorithm function.
+#
+# Initialize graphs to track if a point is visited,
+# current calculated distance from start to point,
+# and previous point taken to get to current point.
+#
+# @param graph Graph.
+# @param start_point Initial vertex/node for the algorithm.
 def dijkstra(graph, start_point):
-    # initialize graphs to track if a point is visited,
-    # current calculated distance from start to point,
-    # and previous point taken to get to current point
+    
     visited = [[False for col in row] for row in graph]
     z = 0
     w = 0
-    for z in range(0,24):
-        for w in range(0,24):
+
+    # Where there's a wall, visited is marked to limit the solution of shortest path.
+    for z in range(0, 24):
+        for w in range(0, 24):
             if graph[z][w] == 1:
                 visited[z][w] = True
+
     distance = [[float('inf') for col in row] for row in graph]
     distance[start_point[0]][start_point[1]] = 0
-    prev_point = [[None for col in row] for row in graph]
+    path = [[None for col in row] for row in graph]
     n, m = len(graph), len(graph[0])
     number_of_points, visited_count = n * m, 0
     directions = [(0, 1), (1, 0), (-1, 0), (0, -1)]
     min_heap = []
 
-    # min_heap item format:
-    # (pt's dist from start on this path, pt's row, pt's col)
+    # Min_heap item format:
+    # (pt's dist from start on this path, pt's row, pt's col).
     heapq.heappush(min_heap, (distance[start_point[0]][start_point[1]], start_point[0], start_point[1]))
 
     while visited_count < number_of_points:
@@ -259,24 +309,34 @@ def dijkstra(graph, start_point):
         for direction in directions:
             new_row, new_col = row + direction[0], col + direction[1]
             if -1 < new_row < n and -1 < new_col < m and not visited[new_row][new_col]:
+                # Chooses if it's better take or not take the vertice to total path.
                 dist_to_new_point = distance_from_start + graph[new_row][new_col]
                 if dist_to_new_point < distance[new_row][new_col]:
                     distance[new_row][new_col] = dist_to_new_point
-                    prev_point[new_row][new_col] = (row, col)
+                    path[new_row][new_col] = (row, col)
                     heapq.heappush(min_heap, (dist_to_new_point, new_row, new_col))
         visited[row][col] = True
         visited_count += 1
 
-    return distance, prev_point
+    return distance, path
 
-def find_shortest_path(prev_point_graph, end_point):
+## Find Shortest Path function.
+#
+# Find the shortest path in a graph. 
+# In that case, the path is only one, because all mazes have only 1 path from start to end.
+#
+# @param prev_point_graph Previous point of the graph.
+# @param end_point End point of the graph.
+def find_shortest_path(path_graph, end_point):
+
     shortest_path = []
     current_point = end_point
     i = 0
     while current_point is not None:
         i += 1
         shortest_path.append(current_point)
-        current_point = prev_point_graph[current_point[0]][current_point[1]]
+        current_point = path_graph[current_point[0]][current_point[1]]
+    # Build path from end to start -> reverse way.
     shortest_path.reverse()
     
     print("Solved Maze in", i, "steps.")
@@ -301,14 +361,13 @@ def display():
     S = ut.matScale(0.1, 0.1, 0.1)
     Rx = ut.matRotateX(np.radians(0.0))
     Ry = ut.matRotateY(np.radians(-80.0+camera_posx))
-    model = np.matmul(Rx,S)
-    model = np.matmul(Ry,model)
-    loc = gl.glGetUniformLocation(program, "model");
+    model = np.matmul(Rx, S)
+    model = np.matmul(Ry, model)
+    loc = gl.glGetUniformLocation(program, "model")
     gl.glUniformMatrix4fv(loc, 1, gl.GL_FALSE, model.transpose())
     
-    
     projection = ut.matPerspective(np.radians(camera_posy+60.0), win_width/win_height, 0.1, 100.0)
-    loc = gl.glGetUniformLocation(program, "projection");
+    loc = gl.glGetUniformLocation(program, "projection")
     gl.glUniformMatrix4fv(loc, 1, gl.GL_FALSE, projection.transpose())
    
     # Light color.
@@ -326,27 +385,33 @@ def display():
     gl.glUniformMatrix4fv(loc, 1, gl.GL_FALSE, view.transpose())
     
     if algorithm == 1:
-        n=1
-        p=0.5
-        size=8
-        grid = np.random.binomial(n,p, size=(size,size))
-        processed_grid = preprocess_grid(grid, size)
+        n = 1
+        p = 0.5
+        size = 8
+        grid = np.random.binomial(n, p, size=(size,size))
+        processed_grid = preprocess_binomial(grid, size)
         maze = maze_binary_tree(processed_grid, size)
         output_int = maze_int_binary_tree(maze)
+        print("Maze generated by binary tree.")
+        print("")
     elif algorithm == 2:
         x = 25
         y = 25
         maze = maze_kruskal(x, y)
         output_int = maze_int_kruskal(maze)
+        print("Maze generated by kruskal.")
+        print("")
     
     # Each cube will receive the color relationed with being or not part of
-    # the free way of the maze.
+    # the free way of the maze and relationed with being part of the solution or not.
     offsety = -20
     offsetz = -20
     z = 0
     w = 0
-    for z in range(0,24):
-        for w in range(0,24):
+    # Drawing a cube grid.
+    for z in range(0, 24):
+        for w in range(0, 24):
+            # White -> the walls, Red -> the free path, Blue -> the solution.
             if(output_int[z][w] == 1):
                 loc = gl.glGetUniformLocation(program, "objectColor")
                 gl.glUniform3f(loc, 1.0, 1.0, 1.0)
@@ -357,6 +422,7 @@ def display():
                 loc = gl.glGetUniformLocation(program, "objectColor")
                 gl.glUniform3f(loc, 0.2, 2.0, 0.8)
             
+            # Draw one cube at a time.
             offsety_loc = gl.glGetUniformLocation(program, "offsety")
             gl.glUniform1f(offsety_loc, offsety)
             offsetz_loc = gl.glGetUniformLocation(program, "offsetz")
@@ -371,20 +437,18 @@ def display():
     
     glut.glutSwapBuffers()
 
-
 ## Reshape function.
 # 
 # Called when window is resized.
 #
 # @param width New window width.
 # @param height New window height.
-def reshape(width,height):
+def reshape(width, height):
 
     win_width = width
     win_height = height
     gl.glViewport(0, 0, width, height)
     glut.glutPostRedisplay()
-
 
 ## Keyboard function.
 #
@@ -400,25 +464,21 @@ def keyboard(key, x, y):
     global camera_posy
 
     if key == b'\x1b'or key == b'q':
-        glut.glutLeaveMainLoop()
-    
+        glut.glutLeaveMainLoop()    
     if key == b't'or key == b'T':
-        algorithm = 1
-    
+        algorithm = 1 
     if key == b'k'or key == b'K':
         algorithm = 2
-    
     if key == b'w' or key == b'W':
-        camera_posy += 0.5;
+        camera_posy += 0.5
     if key == b's' or key == b'S':
-        camera_posy -= 0.5;
+        camera_posy -= 0.5
     if key == b'a' or key == b'A':
-        camera_posx -= 0.5;
+        camera_posx -= 0.5
     if key == b'd' or key == b'D':
-        camera_posx += 0.5;
+        camera_posx += 0.5
     
     glut.glutPostRedisplay()
-
 
 ## Init vertex data.
 #
@@ -431,7 +491,7 @@ def initData():
 
     # Set triangle vertices.
     vertices = np.array([
-        # coordinate       # normal
+        # Coordinate       # Normal
         -0.5, -0.5,  0.5,  0.0,  0.0,  1.0,
          0.5, -0.5,  0.5,  0.0,  0.0,  1.0,
          0.5,  0.5,  0.5,  0.0,  0.0,  1.0,
@@ -474,7 +534,7 @@ def initData():
     VAO = gl.glGenVertexArrays(1)
     gl.glBindVertexArray(VAO)
 
-    # Vertex buffer
+    # Vertex buffer.
     VBO = gl.glGenBuffers(1)
     gl.glBindBuffer(gl.GL_ARRAY_BUFFER, VBO)
     gl.glBufferData(gl.GL_ARRAY_BUFFER, vertices.nbytes, vertices, gl.GL_STATIC_DRAW)
@@ -488,7 +548,7 @@ def initData():
     # Unbind Vertex Array Object.
     gl.glBindVertexArray(0)
 
-    gl.glEnable(gl.GL_DEPTH_TEST);
+    gl.glEnable(gl.GL_DEPTH_TEST)
 
 ## Create program (shaders).
 #
@@ -505,13 +565,13 @@ def initShaders():
 def main():
 
     glut.glutInit()
-    glut.glutInitContextVersion(3, 3);
-    glut.glutInitContextProfile(glut.GLUT_CORE_PROFILE);
+    glut.glutInitContextVersion(3, 3)
+    glut.glutInitContextProfile(glut.GLUT_CORE_PROFILE)
     glut.glutInitDisplayMode(glut.GLUT_DOUBLE | glut.GLUT_RGBA | glut.GLUT_DEPTH)
     glut.glutInitWindowSize(win_width,win_height)
     glut.glutCreateWindow('Maze Generator Using Graph Algorithm')
     
-    # Init vertex data for the triangle.
+    # Init data.
     initData()
     
     # Create shaders.
